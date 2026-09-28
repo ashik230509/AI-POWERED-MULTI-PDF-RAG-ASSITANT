@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import Mock, patch
+
 from bm25_retriever import BM25Retriever
 from chunker import chunk_pages
 from hybrid_retriever import HybridRetriever
+from llm import LLMClient, OllamaClient
 from pdf_processor import extract_pdf_pages
 from rag_pipeline import RAGPipeline
 
@@ -188,3 +191,47 @@ def test_citation_metadata_deduplicates_by_document_and_page():
     assert citations[0]["document_name"] == "Machine Learning.pdf"
     assert citations[0]["page_number"] == 5
     assert citations[1]["page_number"] == 7
+
+
+def test_openai_compatible_client_uses_chat_completions_api():
+    client = LLMClient(
+        provider="openai-compatible",
+        base_url="https://llm.example/v1",
+        model="example-model",
+        api_key="test-key",
+    )
+    response = Mock(status_code=200)
+    response.json.return_value = {
+        "choices": [{"message": {"content": "Grounded answer."}}]
+    }
+
+    with patch("llm.requests.post", return_value=response) as post:
+        answer = client.generate(
+            [{"role": "user", "content": "Question?"}],
+            temperature=0.2,
+        )
+
+    assert answer == "Grounded answer."
+    assert post.call_args.args[0] == "https://llm.example/v1/chat/completions"
+    assert post.call_args.kwargs["headers"] == {
+        "Authorization": "Bearer test-key"
+    }
+    assert post.call_args.kwargs["json"]["temperature"] == 0.2
+
+
+def test_ollama_client_keeps_native_api_and_legacy_name():
+    client = OllamaClient(base_url="http://localhost:11434", model="llama3.1")
+    response = Mock(status_code=200)
+    response.json.return_value = {
+        "message": {"content": "Local answer."}
+    }
+
+    with patch("llm.requests.post", return_value=response) as post:
+        answer = client.generate(
+            [{"role": "user", "content": "Question?"}],
+            temperature=0.3,
+        )
+
+    assert answer == "Local answer."
+    assert post.call_args.args[0] == "http://localhost:11434/api/chat"
+    assert post.call_args.kwargs["json"]["options"] == {"temperature": 0.3}

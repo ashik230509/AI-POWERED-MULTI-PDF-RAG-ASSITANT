@@ -75,6 +75,22 @@ streamlit run app.py
 
 Then open the local URL shown in the terminal.
 
+## Deploy on Streamlit Community Cloud
+
+1. Create an app at [share.streamlit.io](https://share.streamlit.io/) and select this GitHub repository, branch `main`, and `app.py`.
+2. In the app's **Settings > Secrets**, add a hosted OpenAI-compatible chat endpoint. For example:
+
+```toml
+LLM_PROVIDER = "openai-compatible"
+LLM_BASE_URL = "https://api.openai.com/v1"
+LLM_MODEL = "gpt-4o-mini"
+LLM_API_KEY = "your-provider-api-key"
+```
+
+Use the base URL, model name, and API key supplied by your chosen provider. Keep the API key in Streamlit Secrets; do not commit it to GitHub. The default `ollama` provider remains available for local development, but `localhost` Ollama is not reachable from a hosted Streamlit app.
+
+Community Cloud installs Python packages from `requirements.txt`. The embedding and reranker models are downloaded from Hugging Face the first time the app starts, so the initial startup can take longer.
+
 ## Example usage
 
 1. Upload one or more PDFs in the sidebar.

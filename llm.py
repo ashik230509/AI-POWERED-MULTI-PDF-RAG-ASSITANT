@@ -7,31 +7,53 @@ from typing import Any
 import requests
 
 from config import (
+    LLM_API_KEY,
+    LLM_BASE_URL,
+    LLM_MODEL,
+    LLM_PROVIDER,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
 )
 
 
-class OllamaClient:
+class LLMClient:
     def __init__(
         self,
+        provider: str | None = None,
         base_url: str | None = None,
         model: str | None = None,
+        api_key: str | None = None,
     ) -> None:
 
-        self.base_url = (
-            base_url
-            or OLLAMA_BASE_URL
-        ).rstrip("/")
+        self.provider = (provider or LLM_PROVIDER).strip().lower()
+        if self.provider not in {"ollama", "openai-compatible"}:
+            raise ValueError(
+                "LLM_PROVIDER must be 'ollama' or 'openai-compatible'."
+            )
 
-        self.model = (
-            model
-            or OLLAMA_MODEL
-        )
+        if self.provider == "ollama":
+            self.base_url = (base_url or OLLAMA_BASE_URL).rstrip("/")
+            self.model = model or OLLAMA_MODEL
+            self.chat_url = f"{self.base_url}/api/chat"
+        else:
+            self.base_url = (base_url or LLM_BASE_URL).rstrip("/")
+            self.model = model or LLM_MODEL
+            if not self.base_url:
+                raise ValueError(
+                    "LLM_BASE_URL is required for the openai-compatible provider."
+                )
+            if not self.model:
+                raise ValueError(
+                    "LLM_MODEL is required for the openai-compatible provider."
+                )
+            self.chat_url = f"{self.base_url}/chat/completions"
 
-        self.chat_url = (
-            f"{self.base_url}/api/chat"
-        )
+        self.api_key = LLM_API_KEY if api_key is None else api_key
+
+    def _headers(self) -> dict[str, str]:
+        if self.provider == "openai-compatible" and self.api_key:
+            return {"Authorization": f"Bearer {self.api_key}"}
+        return {}
 
     # =========================================================
     # OLLAMA AVAILABILITY
@@ -42,7 +64,10 @@ class OllamaClient:
         try:
 
             response = requests.get(
-                f"{self.base_url}/api/tags",
+                f"{self.base_url}/api/tags"
+                if self.provider == "ollama"
+                else f"{self.base_url}/models",
+                headers=self._headers(),
                 timeout=10,
             )
 
@@ -63,7 +88,10 @@ class OllamaClient:
         try:
 
             response = requests.get(
-                f"{self.base_url}/api/tags",
+                f"{self.base_url}/api/tags"
+                if self.provider == "ollama"
+                else f"{self.base_url}/models",
+                headers=self._headers(),
                 timeout=10,
             )
 
@@ -72,18 +100,14 @@ class OllamaClient:
             data = response.json()
 
             models = data.get(
-                "models",
+                "models" if self.provider == "ollama" else "data",
                 [],
             )
-
+            model_key = "name" if self.provider == "ollama" else "id"
             available_models = {
-                str(
-                    model.get(
-                        "name",
-                        "",
-                    )
-                )
+                str(model.get(model_key, ""))
                 for model in models
+                if isinstance(model, dict)
             }
 
             if self.model in available_models:
@@ -92,21 +116,11 @@ class OllamaClient:
             # Handle cases where the configured model
             # contains :latest but the API returns the
             # base model name or vice versa.
-            configured_base = (
-                self.model.split(":")[0]
-            )
-
-            for available_model in available_models:
-
-                available_base = (
-                    available_model.split(":")[0]
-                )
-
-                if (
-                    available_base
-                    == configured_base
-                ):
-                    return True
+            if self.provider == "ollama":
+                configured_base = self.model.split(":")[0]
+                for available_model in available_models:
+                    if available_model.split(":")[0] == configured_base:
+                        return True
 
             return False
 
@@ -133,15 +147,17 @@ class OllamaClient:
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "options": {
-                "temperature": temperature,
-            },
         }
+        if self.provider == "ollama":
+            payload["options"] = {"temperature": temperature}
+        else:
+            payload["temperature"] = temperature
 
         try:
 
             response = requests.post(
                 self.chat_url,
+                headers=self._headers(),
                 json=payload,
                 timeout=180,
             )
@@ -149,7 +165,7 @@ class OllamaClient:
         except requests.RequestException as exc:
 
             raise RuntimeError(
-                f"Unable to connect to Ollama: {exc}"
+                f"Unable to connect to the {self.provider} LLM provider: {exc}"
             ) from exc
 
         if response.status_code != 200:
@@ -174,7 +190,7 @@ class OllamaClient:
                 )
 
             raise RuntimeError(
-                "Ollama returned an error "
+                "The LLM provider returned an error "
                 f"({response.status_code}): "
                 f"{error_message}"
             )
@@ -186,18 +202,20 @@ class OllamaClient:
         except ValueError as exc:
 
             raise RuntimeError(
-                "Ollama returned invalid JSON."
+                "The LLM provider returned invalid JSON."
             ) from exc
 
-        message = data.get(
-            "message",
-            {},
-        )
-
-        content = message.get(
-            "content",
-            "",
-        )
+        if self.provider == "ollama":
+            message = data.get("message", {})
+            content = message.get("content", "")
+        else:
+            choices = data.get("choices", [])
+            if not choices or not isinstance(choices[0], dict):
+                raise RuntimeError(
+                    "The LLM provider response did not include a chat completion."
+                )
+            message = choices[0].get("message", {})
+            content = message.get("content", "")
 
         if not isinstance(
             content,
@@ -946,6 +964,10 @@ STRICT RULES:
         return messages
 
 
+OllamaClient = LLMClient
+
+
 __all__ = [
-    "OllamaClient"
+    "LLMClient",
+    "OllamaClient",
 ]

@@ -12,7 +12,7 @@ from config import (
 )
 from embeddings import EmbeddingModel
 from hybrid_retriever import HybridRetriever
-from llm import OllamaClient
+from llm import LLMClient
 from pdf_processor import extract_documents
 from reranker import CrossEncoderReranker
 from vector_store import VectorStore
@@ -25,7 +25,7 @@ class RAGPipeline:
         vector_store: VectorStore | None = None,
         bm25_retriever: BM25Retriever | None = None,
         reranker: CrossEncoderReranker | None = None,
-        llm_client: OllamaClient | None = None,
+        llm_client: LLMClient | None = None,
     ) -> None:
 
         self.embedding_model = (
@@ -51,7 +51,7 @@ class RAGPipeline:
 
         self.llm_client = (
             llm_client
-            or OllamaClient()
+            or LLMClient()
         )
 
         self.chunks: list[
