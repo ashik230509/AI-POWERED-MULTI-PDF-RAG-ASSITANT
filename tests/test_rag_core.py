@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from bm25_retriever import BM25Retriever
 from chunker import chunk_pages
 from hybrid_retriever import HybridRetriever
@@ -235,3 +237,27 @@ def test_ollama_client_keeps_native_api_and_legacy_name():
     assert answer == "Local answer."
     assert post.call_args.args[0] == "http://localhost:11434/api/chat"
     assert post.call_args.kwargs["json"]["options"] == {"temperature": 0.3}
+
+
+@pytest.mark.parametrize(
+    ("error_payload", "expected_message"),
+    [
+        ({"error": {"message": "API key is invalid."}}, "API key is invalid."),
+        (["unexpected error payload"], "unexpected error payload"),
+    ],
+)
+def test_llm_client_formats_provider_errors(error_payload, expected_message):
+    client = LLMClient(
+        provider="openai-compatible",
+        base_url="https://llm.example/v1",
+        model="example-model",
+        api_key="test-key",
+    )
+    response = Mock(status_code=429, text="provider error")
+    response.json.return_value = error_payload
+
+    with patch("llm.requests.post", return_value=response):
+        with pytest.raises(RuntimeError) as error:
+            client.generate([{"role": "user", "content": "Question?"}])
+
+    assert expected_message in str(error.value)

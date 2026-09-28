@@ -171,23 +171,20 @@ class LLMClient:
         if response.status_code != 200:
 
             try:
-
-                error_data = (
-                    response.json()
-                )
-
-                error_message = (
-                    error_data.get(
-                        "error",
-                        response.text,
-                    )
-                )
+                error_data = response.json()
+                if isinstance(error_data, dict):
+                    error_detail = error_data.get("error", error_data)
+                    if isinstance(error_detail, dict):
+                        error_message = error_detail.get("message", error_detail)
+                    else:
+                        error_message = error_detail
+                else:
+                    error_message = error_data
 
             except ValueError:
+                error_message = response.text
 
-                error_message = (
-                    response.text
-                )
+            error_message = str(error_message or response.text)
 
             raise RuntimeError(
                 "The LLM provider returned an error "
