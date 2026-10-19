@@ -16,6 +16,7 @@ The hosted app may take a little time to respond after being idle. If Streamlit 
 - **Follow-up questions:** recent conversation history is included to help interpret follow-ups.
 - **Typo-tolerant keyword search:** adds likely corrections for query words that are missing from the uploaded-document vocabulary (for example, `notise` may match `notice`).
 - **Flexible LLM backend:** supports local Ollama and OpenAI-compatible API endpoints.
+- **Temporary outage handling:** retries LLM provider 503 responses up to twice with a short backoff.
 
 ## How it works
 

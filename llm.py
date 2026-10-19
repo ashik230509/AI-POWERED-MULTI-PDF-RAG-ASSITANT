@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any
 
 import requests
@@ -14,6 +15,9 @@ from config import (
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
 )
+
+_MAX_503_RETRIES = 2
+_503_RETRY_DELAY_SECONDS = 1
 
 
 class LLMClient:
@@ -153,20 +157,23 @@ class LLMClient:
         else:
             payload["temperature"] = temperature
 
-        try:
+        for attempt in range(_MAX_503_RETRIES + 1):
+            try:
+                response = requests.post(
+                    self.chat_url,
+                    headers=self._headers(),
+                    json=payload,
+                    timeout=180,
+                )
+            except requests.RequestException as exc:
+                raise RuntimeError(
+                    f"Unable to connect to the {self.provider} LLM provider: {exc}"
+                ) from exc
 
-            response = requests.post(
-                self.chat_url,
-                headers=self._headers(),
-                json=payload,
-                timeout=180,
-            )
+            if response.status_code != 503 or attempt == _MAX_503_RETRIES:
+                break
 
-        except requests.RequestException as exc:
-
-            raise RuntimeError(
-                f"Unable to connect to the {self.provider} LLM provider: {exc}"
-            ) from exc
+            time.sleep(_503_RETRY_DELAY_SECONDS * (2**attempt))
 
         if response.status_code != 200:
 

@@ -261,3 +261,48 @@ def test_llm_client_formats_provider_errors(error_payload, expected_message):
             client.generate([{"role": "user", "content": "Question?"}])
 
     assert expected_message in str(error.value)
+
+
+def test_llm_client_retries_temporary_503_and_succeeds():
+    client = LLMClient(
+        provider="openai-compatible",
+        base_url="https://llm.example/v1",
+        model="example-model",
+    )
+    unavailable = Mock(status_code=503)
+    success = Mock(status_code=200)
+    success.json.return_value = {
+        "choices": [{"message": {"content": "Recovered answer."}}]
+    }
+
+    with (
+        patch("llm.requests.post", side_effect=[unavailable, success]) as post,
+        patch("llm.time.sleep") as sleep,
+    ):
+        answer = client.generate([{"role": "user", "content": "Question?"}])
+
+    assert answer == "Recovered answer."
+    assert post.call_count == 2
+    sleep.assert_called_once_with(1)
+
+
+def test_llm_client_stops_after_bounded_503_retries():
+    client = LLMClient(
+        provider="openai-compatible",
+        base_url="https://llm.example/v1",
+        model="example-model",
+    )
+    unavailable = Mock(status_code=503, text="temporarily unavailable")
+    unavailable.json.return_value = {
+        "error": {"message": "The model is busy."}
+    }
+
+    with (
+        patch("llm.requests.post", return_value=unavailable) as post,
+        patch("llm.time.sleep") as sleep,
+        pytest.raises(RuntimeError, match=r"error \(503\): The model is busy"),
+    ):
+        client.generate([{"role": "user", "content": "Question?"}])
+
+    assert post.call_count == 3
+    assert [call.args[0] for call in sleep.call_args_list] == [1, 2]
