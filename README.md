@@ -201,5 +201,5 @@ pytest
 
 ## Author
 
-**Ashik T** — B.Tech Information Technology, Nandha College of Technology
+**Ashik T** — B.Tech Information Technology,
 GitHub: [@ashik230509](https://github.com/ashik230509)
