@@ -1,5 +1,7 @@
 # AI-Powered Multi-Document RAG Chatbot V2
 
+[Open the live app](https://aipdfa.streamlit.app/)
+
 This project is a real PDF chatbot built with a retrieval-augmented generation (RAG) pipeline. It accepts multiple PDFs, extracts page-aware text, chunks the content, builds semantic and keyword indexes, reranks the strongest evidence, and then asks Ollama to answer using only the retrieved context.
 
 ## Architecture overview
